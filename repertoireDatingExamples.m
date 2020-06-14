@@ -48,7 +48,7 @@ NNids = NNids(:, 2:end);                               % points should not be th
 repertoireDating.plotPercentiles(RPD, RPD_epoch, RPD_subEpoch, 16:25);
 
 %% Compute and plot rendition percentiles for all datapoints from epoch 20
-repertoireDating.renditionPercentiles(NNids, epoch, 'valid', epoch == 20, 'doPlot', true);
+repertoireDating.renditionPercentiles(NNids, epoch, 'valid', epoch == 1, 'doPlot', true);
     
 %% Compute mixing matrix and plot it
 MM = repertoireDating.mixingMatrix(NNids, epoch, 'doPlot', true);
