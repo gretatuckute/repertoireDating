@@ -1,3 +1,9 @@
+clear all 
+close all 
+home
+
+%% Figure specs
+
 set(groot, ...
 'DefaultFigureColor', 'w', ...
 'DefaultAxesLineWidth', 0.5, ...
@@ -15,34 +21,31 @@ set(groot, ...
 set(groot, 'DefaultAxesTickDir', 'out');
 set(groot, 'DefaultAxesTickDirMode', 'manual');
 
-%%
+%% Directories
+data_dir = '/om/user/ehoseini/MyData/neural_manifolds/train_network_on_synthetic';
 
-clear all 
-close all 
-home
-%
-% if 1
-%     fprintf('adding tools to path \n');
-%     addpath('~/MyCodes/repertoireDating//');
-% end 
-%
-train_sess='train_May06_18-38-41'%'train_May11_15-36-11';
-dat_dir='/om/user/ehoseini/MyData/LearningDynamics/train_results_matlab/';
-train_files=dir(strcat(dat_dir,train_sess,'/*.mat'));
-d_train=arrayfun(@(x) {strcat(train_files(x).folder,'/',train_files(x).name)}, 1:length(train_files));
-[~,idx]=sort([train_files.datenum]);
-d_train = d_train(idx);
-d_train'
-%subsample and construct a data matrix 
-nSamples=50;
-nEpochs=length(d_train);
-data=[];
-tars=[];
-subEpoch=[];
-epoch=[];
+% Load the generated mat files, session of interest: (input, the model identifier)
+model_identifier = 
+KNN_files = dir(strcat(data_dir, model_identifier, '/extracted*.mat'));
+
+
+%%
+KNN_data = arrayfun(@(x) {strcat(KNN_files(x).folder,'/',KNN_files(x).name)}, 1:length(KNN_files));
+[~,idx]=sort([KNN_files.datenum]);
+KNN_data = KNN_data(idx);
+KNN_data'
+
+% Subsample and construct a data matrix 
+nSamples = 50; % Per point in time, i.e. per batch idx
+nEpochs = length(KNN_data);
+
+data = [];
+targets = [];
+subEpoch = [];
+epoch = [];
 %% 
-for i=1:length(d_train)
-    t=load(d_train{i});
+for i=1:length(KNN_data)
+    t=load(KNN_data{i});
     unique_cell=mat2cell(unique(t.batch),1,ones(1,length(unique(t.batch))));
     batch_idx_cell=cellfun(@(x) find(t.batch==x),unique_cell,'uni',false);
     batchs=1:length(batch_idx_cell);
@@ -50,16 +53,18 @@ for i=1:length(d_train)
     batchs=reshape(batchs_,[],1);
     batch_subsample=cell2mat(cellfun(@(x) randperm(length(x),nSamples)+x(1)-1,batch_idx_cell,'uni',false));
     data_subsample=double(t.fc(batch_subsample,:));
-    tar_subsample=double(t.target(batch_subsample))';
+    target_subsample=double(t.target(batch_subsample))';
     batch_sub=double(t.batch(batch_subsample))';
     temp=unique(batch_sub);
     bath_sub_idx=sum(cell2mat(arrayfun(@(x) x*(batch_sub==temp(x)),1:length(temp),'UniformOutput',false)),2);
     data=[data;data_subsample];
     subEpoch=[subEpoch;bath_sub_idx];
-    tars=[tars;tar_subsample];
-    epoch=[epoch;i+0*tar_subsample];
+    targets=[targets;target_subsample];
+    epoch=[epoch;i+0*target_subsample];
 end 
 productionTime = (1:length(epoch))'; 
+
+%% %%%%%%%%%% ANALYSES %%%%%%%%%%%%%%
 %% 
 norms = vecnorm(data');
 figure;plot(productionTime,norms,'r.')
@@ -167,21 +172,21 @@ figure;
 imagesc(squareform(pdist(data,'cosine')));
 %% 
 [RPD, RPD_epoch, RPD_subEpoch] = repertoireDating.percentiles(NNids, epoch, subEpoch);
-repertoireDating.plotPercentiles(RPD, RPD_epoch, RPD_subEpoch, 1:length(d_train));
+repertoireDating.plotPercentiles(RPD, RPD_epoch, RPD_subEpoch, 1:length(KNN_data));
 
 repertoireDating.renditionPercentiles(NNids, epoch,  'doPlot', true);
 repertoireDating.renditionPercentiles(NNids, epoch, 'valid', epoch == 50, 'doPlot', true,'percentiles',[5,50,95]);
 
 %%
 [RPD, RPD_epoch, RPD_subEpoch] = repertoireDating.percentiles(NNids1, epoch(1:(length(data)/2)), subEpoch(1:(length(data)/2)));
-repertoireDating.plotPercentiles(RPD, RPD_epoch, RPD_subEpoch, 1:length(d_train)/2);
+repertoireDating.plotPercentiles(RPD, RPD_epoch, RPD_subEpoch, 1:length(KNN_data)/2);
 
 repertoireDating.renditionPercentiles(NNids1, epoch(1:(length(data)/2)),  'doPlot', true);
 repertoireDating.renditionPercentiles(NNids1, epoch(1:(length(data)/2)), 'valid', epoch == 15, 'doPlot', true,'percentiles',[5,50,95]);
 
 %% 
 [RPD, RPD_epoch, RPD_subEpoch] = repertoireDating.percentiles(NNids2, epoch((length(data)/2)+1:length(data)), subEpoch((length(data)/2)+1:length(data)));
-repertoireDating.plotPercentiles(RPD, RPD_epoch, RPD_subEpoch, (length(d_train)/2)+1:length(d_train));
+repertoireDating.plotPercentiles(RPD, RPD_epoch, RPD_subEpoch, (length(KNN_data)/2)+1:length(KNN_data));
 
 repertoireDating.renditionPercentiles(NNids2, epoch((length(data)/2)+1:length(data)),  'doPlot', true);
 repertoireDating.renditionPercentiles(NNids2, epoch((length(data)/2)+1:length(data)), 'valid', epoch == 15, 'doPlot', true,'percentiles',[5,50,95]);
