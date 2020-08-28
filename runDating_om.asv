@@ -152,11 +152,6 @@ relTime = productionTime./max(productionTime);
 saveStr = strcat(model_identifier,'_',layer,'_hier_',num2str(hier_level),'_numSubsamples_',num2str(num_subsamples),'_k_',num2str(k));
 colorsEpoch = magma(max(epoch))% +1); % 3 colors
 % colorsEpoch = colorsEpoch(2:end, :);
-colorsTarget = magma(max(num_classes));
-targetLoc = arrayfun(@(x) find(targets==x), [1:max(target)],'uniformoutput',false); % Locates the targets
-
-
-
 %% Make axes labels
 subEpochSwitch = diff(subEpoch);
 subEpochSwitch = [0;subEpochSwitch];
@@ -210,9 +205,9 @@ end
 %% Vector norm
 norm = vecnorm(data');
 
-% Epoch coloring
 if save_fig
     figure;
+    ax=axes()
     hold on
     arrayfun(@(i) scatter(productionTime(epochLoc{i})', norm(epochLoc{i})', 2, colorsEpoch(i,:), 'filled', 'o'), [1:max(epoch)])
     hold on
@@ -224,11 +219,19 @@ if save_fig
     %saveas(gcf, strcat(pwd,filesep,'figures',filesep,'norm_epochColor_',saveStr,'.pdf'));
 end 
 
-% Target coloring
+
+%%
+colorsTarget = magma(max(num_classes))
+
+targetLoc = arrayfun(@(x) find(target==x), [1:max(data,1)],'uniformoutput',false); % Locates the targets
+
+
+
 if save_fig
     figure;
+    ax=axes()
     hold on
-    arrayfun(@(i) scatter(productionTime(targetLoc{i})', norm(targetLoc{i})', 8, colorsTarget(i,:), 'filled', 'o'), [1:max(targets)])
+    arrayfun(@(i) scatter(productionTime(epochLoc{i})', norm(epochLoc{i})', 2, colorsEpoch(i,:), 'filled', 'o'), [1:max(epoch)])
     hold on
     set(gca,'XTick',downsample(productionTime, round(size(relTime,1)/10)))
     set(gca,'XTickLabel',downsample(round(relTime,2), round(size(relTime,1)/10)))
@@ -237,7 +240,6 @@ if save_fig
     axis tight
     %saveas(gcf, strcat(pwd,filesep,'figures',filesep,'norm_targetColor_',saveStr,'.pdf'));
 end 
-
 %% 
 k=300
 NNids_self = knnsearch(data, data, 'K', k , 'Distance', dist_metric); 
