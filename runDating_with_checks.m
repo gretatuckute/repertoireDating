@@ -1,8 +1,10 @@
-function params_out=runDating(varargin)
+function params_out=runDating_with_checks(varargin)
 p=inputParser();
 addParameter(p, 'data_dir', '/om/group/evlab/Greta_Eghbal_manifolds/extracted');
 addParameter(p, 'model_identifier', 'NN-partition_nclass=50_nobj=50000_beta=0.01_sigma=1.5_nfeat=3072-train_test-test_performance-epoch=1-batchidx=600');
 addParameter(p, 'layer', 'layer_3_Linear');
+addParameter(p, 'hier_level', 1);
+
 addParameter(p, 'k', 50);
 addParameter(p, 'dist_metric', 'euclidean');
 addParameter(p, 'num_subsamples', 60);
@@ -32,10 +34,10 @@ set(groot, 'DefaultAxesTickDir', 'out');
 set(groot, 'DefaultAxesTickDirMode', 'manual');
 
 %% Directories
-data_dir = 'C:\Users\greta\Documents\GitHub\neural_manifolds\local\partition_test\';
+data_dir = 'C:\Users\greta\Documents\GitHub\neural_manifolds\local\';
 % Load the generated mat files, session of interest: (input, the model identifier)
-model_identifier = 'NN-tree_nclass=50_nobj=50000_beta=0.01_sigma=1.5_nfeat=3072-train_test-fixed'
-layer = 'layer_2_Linear'
+model_identifier = 'NN-partition_nclass=50_nobj=50000_nhier=1_beta=0.0_sigma=0.83_nfeat=3072-train_test-fixed'
+layer = 'layer_1_Linear'
 KNN_files = dir(strcat(data_dir, model_identifier, '\*', layer, '_extracted.mat'))
 
 %% 
@@ -43,121 +45,118 @@ order = cellfun(@(x) str2num(x(1:4)), {KNN_files.name}, 'UniformOutput', false)
 assert(issorted(cell2mat(order)), 'Files not ordered correctly!')
 
 %% test
-
+num_subsamples = 120; % Per point in time, i.e. per batch idx
+hier_level = 1;
+k = 50;
+dist_metric = 'euclidean'
 KNN_data = arrayfun(@(x) {strcat(KNN_files(x).folder,'/',KNN_files(x).name)}, 1:length(KNN_files));
 
 file = load(KNN_data{1}).activation;
-e = file.projection_results{1,2}.( layer );
+e = file.projection_results{1, hier_level}.( layer );
 
-%%
 data_size = size(e)
 num_classes = data_size(1)
 num_features = data_size(2)
 num_examples = data_size(3)
 
-for i = 1:length(KNN_data)
-    f = load(KNN_data{i});
-    
-    % get batch/epoch 
-    
-end
-
-% Subsample and construct a data matrix 
-num_subsamples = 120; % Per point in time, i.e. per batch idx
-num_epochs = length(KNN_data);
-
-data = [];
-targets = [];
-subEpoch = [];
-epoch = [];
-
-% Assert that subsampling across time is possible 
+%% Assert that subsampling across time is possible 
 assert(num_subsamples <= num_classes * num_examples, 'Too many subsamples specified')
 assert(num_subsamples >= num_classes, 'Number of subsamples has to be equal to or larger than number of classes')
 
-%% 
-% Make sure at least one sample per class per time point
-num_remaining_sub = num_subsamples - num_classes
-fix_sub = randsample(num_classes, num_classes) % Randomize the fixed samples 
+%% Iterate over all files
 
-ep = permute(e, [3 1 2]);
-% check
-% c1=e(2,:,3) % 2nd class, 3rd example
-% c2=squeeze(ep(3,2,:))' % 2nd class, 3rd example
-% isequal(c1,c2)
+data = [];
+targets = [];
+epoch = [];
+subEpoch = [];
 
-er=reshape(ep, [num_classes*num_examples, num_features]);
-
-c1=squeeze(ep(1,2,:)); % first sample, 2nd class
-c2=squeeze(ep(num_examples,2,:)); % last sample, 2nd class 
-
-% test that it matches with the reshaped version
-r1=squeeze(er(num_examples+1,:))'; % first sample, 2nd class
-isequal(c1,r1)
-
-r2=squeeze(er(num_examples*2,:))'; % last sample, 2nd class
-isequal(c2,r2)
-
-% I.e. concatenated according to: rows = num samples per class, e.g. if
-% num_examples = 20, then the first 20 rows correspond to all samples from
-% class 1
-
-sub = randsample(num_examples, num_classes, true);
-add = linspace(0,num_examples*num_classes, num_classes+1);
-add2 = add(1:50);
-
-id = sub' + add2; % Indices for subsampling per category
-
-% Add more indices
-if num_subsamples ~= num_classes
-    num_remaining_sub = num_subsamples - num_classes
-    draw = [1:num_examples*num_classes]
-    draw2 = setdiff(draw, id)
+for i = 1:51%length(KNN_data)
+    file = load(KNN_data{i}).activation;
+    f = file.projection_results{1,hier_level}.( layer );
     
-    % Now draw from this list, to avoid sampling the same data points 
-    more_id = randsample(draw2, num_remaining_sub, false); % without replacement 
+    
+    % Subsample and construct a data matrix 
+    f_perm = permute(f, [3 1 2]);
+    % check
+    % c1=f(2,:,3) % 2nd class, 3rd example
+    % c2=squeeze(f_perm(3,2,:))' % 3rd example, 2nd class, 
+    % isequal(c1,c2)
+    
+    % figure;imshow(cov(f_res'))
+
+    f_res = reshape(f_perm, [num_classes*num_examples, num_features]);
+    % I.e. concatenated according to: rows = num samples per class, e.g. if
+    % num_examples = 20, then the first 20 rows correspond to all samples from
+    % class 1
+    
+    % Generate targets
+    targets = repelem([1:num_classes], num_examples)';
+    
+%     c1=squeeze(f_perm(1,2,:)); % first sample, 2nd class
+%     c2=squeeze(f_perm(num_examples,2,:)); % last sample, 2nd class 
+
+    % test that it matches with the reshaped version
+%     r1=squeeze(f_res(num_examples+1,:))'; % first sample, 2nd class
+%     isequal(c1,r1)
+% 
+%     r2=squeeze(f_res(num_examples*2,:))'; % last sample, 2nd class
+%     isequal(c2,r2)
+
+
+    % Make sure at least one sample per class per time point
+    sub = randsample(num_examples, num_classes, true);
+    % Add indices according to where to sample from, taking num_examples
+    % into account:
+    add = linspace(0, num_examples*num_classes, num_classes+1);
+    add_array = add(1:num_classes);
+
+    idx_cat = sub' + add_array; % Indices for subsampling per category
+
+    % Add more indices
+    if num_subsamples ~= num_classes
+        num_remaining_sub = num_subsamples - num_classes;
+        draw = [1:num_examples*num_classes]; % possible indices to draw from
+        draw_array = setdiff(draw, idx_cat); % subtract the ones already used for the category requirement
+
+        % Now draw from this list, to avoid sampling the same data points 
+        more_idx = randsample(draw_array, num_remaining_sub, false); % without replacement 
+
+    end
+
+    final_idx = horzcat(idx_cat, more_idx)'
+
+    assert(length(final_idx) == num_subsamples, 'Subsampling index does not match')
+
+    % Subsample
+    subsampled_data = f_res(final_idx,:); % Checked that it correspond to the first idx in the sub list
+    subsampled_target = targets(final_idx);
+    
+    % get batch/epoch 
+    batchidx_cell = file.batchidx
+    batchs = repmat(batchidx_cell, num_subsamples, 1);
+    
+    epoch_cell = file.epoch
+    epochs = repmat(epoch_cell, num_subsamples, 1);
+    
+    
+    % Append
+    data = [data; subsampled_data];
+    epoch = [epoch; epochs];
+    subEpoch = [subEpoch; batchs];
+    targets = [targets; subsampled_target];
+    
 
 end
-
-final_id = horzcat(id, more_id)'
-
-assert(length(final_id) == num_subsamples, 'Subsampling index does not match')
-
-% Subsample
-subsampled_data = er(final_id,:); % Checked that it correspond to the first idx in the sub list
-
-
-
-
-%%
-for i=1:length(KNN_data)
-    t=load(KNN_data{i});
-    unique_cell=mat2cell(unique(t.batch),1,ones(1,length(unique(t.batch))));
-    batch_idx_cell=cellfun(@(x) find(t.batch==x),unique_cell,'uni',false);
-    batchs=1:length(batch_idx_cell);
-    batchs_=repmat(batchs,num_subsamples,1);
-    batchs=reshape(batchs_,[],1);
-    batch_subsample=cell2mat(cellfun(@(x) randperm(length(x),num_subsamples)+x(1)-1,batch_idx_cell,'uni',false));
-    data_subsample=double(t.fc(batch_subsample,:));
-    target_subsample=double(t.target(batch_subsample))';
-    batch_sub=double(t.batch(batch_subsample))';
-    temp=unique(batch_sub);
-    bath_sub_idx=sum(cell2mat(arrayfun(@(x) x*(batch_sub==temp(x)),1:length(temp),'UniformOutput',false)),2);
-    data=[data;data_subsample];
-    subEpoch=[subEpoch;bath_sub_idx];
-    targets=[targets;target_subsample];
-    epoch=[epoch;i+0*target_subsample];
-end 
-productionTime = (1:length(epoch))'; 
 
 %% %%%%%%%%%% ANALYSES %%%%%%%%%%%%%%
 %% 
 norms = vecnorm(data');
+productionTime = (1:length(epoch))'; 
 figure;plot(productionTime,norms,'r.')
 
 %% 
 NNids = knnsearch(data, data, 'K', k , 'Distance', dist_metric); 
-%NNids = NNids(:, 2:end); 
+NNids = NNids(:, 2:end); 
 figure;
 imagesc(NNids)
 
