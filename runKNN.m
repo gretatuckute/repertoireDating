@@ -1,4 +1,4 @@
-function params_out=runDatingv1(varargin)
+function params_out = runKNN(varargin)
 p=inputParser();
 addParameter(p, 'data_dir', '/om/group/evlab/Greta_Eghbal_manifolds/extracted/');
 addParameter(p, 'model_identifier', 'NN-partition_nclass=50_nobj=50000_beta=0.01_sigma=1.5_nfeat=3072-train_test-test_performance-epoch=1-batchidx=600');
@@ -7,8 +7,7 @@ addParameter(p, 'hier_level', 1);
 addParameter(p, 'k', 50);
 addParameter(p, 'dist_metric', 'euclidean');
 addParameter(p, 'num_subsamples', 60);
-addParameter(p, 'save_fig', True);
-
+addParameter(p, 'save_fig', true);
 
 parse(p, varargin{:});
 params = p.Results;
@@ -208,13 +207,13 @@ if save_fig
 end 
 
 %% Vector norm
-norm = vecnorm(data');
+dataNorm = vecnorm(data');
 
 % Epoch coloring
 if save_fig
     figure;
     hold on
-    arrayfun(@(i) scatter(productionTime(epochLoc{i})', norm(epochLoc{i})', 2, colorsEpoch(i,:), 'filled', 'o'), [1:max(epoch)])
+    arrayfun(@(i) scatter(productionTime(epochLoc{i})', dataNorm(epochLoc{i})', 2, colorsEpoch(i,:), 'filled', 'o'), [1:max(epoch)])
     hold on
     set(gca,'XTick',downsample(productionTime, round(size(relTime,1)/10)))
     set(gca,'XTickLabel',downsample(round(relTime,2), round(size(relTime,1)/10)))
@@ -228,7 +227,7 @@ end
 if save_fig
     figure;
     hold on
-    arrayfun(@(i) scatter(productionTime(targetLoc{i})', norm(targetLoc{i})', 8, colorsTarget(i,:), 'filled', 'o'), [1:max(targets)])
+    arrayfun(@(i) scatter(productionTime(targetLoc{i})', dataNorm(targetLoc{i})', 8, colorsTarget(i,:), 'filled', 'o'), [1:max(targets)])
     hold on
     set(gca,'XTick',downsample(productionTime, round(size(relTime,1)/10)))
     set(gca,'XTickLabel',downsample(round(relTime,2), round(size(relTime,1)/10)))
@@ -237,6 +236,12 @@ if save_fig
     axis tight
     saveas(gcf, strcat(pwd,filesep,'figures',filesep,'norm_targetColor_',saveStr));
 end 
+
+%% Vector norm - meaned across samples
+y = reshape(dataNorm, num_subsamples, length(KNN_files));
+meanTimeDataNorm = mean(y, 1);
+
+% figure;scatter([1:237],meanTimeDataNorm)
 
 %% Nearest neighbors
 NNids_self = knnsearch(data, data, 'K', k, 'Distance', dist_metric); 
@@ -256,6 +261,9 @@ if save_fig
     saveas(gcf, strcat(pwd,filesep,'figures',filesep,'NearestNeighbors_',saveStr));
 end  
 
+y1 = reshape(NNids, num_subsamples, length(KNN_files), k-1); % num subsamples x num points in time x num k-1
+meanTimeNNids = squeeze(mean(y1, 1));
+% figure;imagesc(meanTimeNNids)
 
 %% Compute norm of neighbors
 normNN = zeros(k - 1, length(epoch));
@@ -268,8 +276,11 @@ meanNormNN = mean(normNN,1);
 stdNormNN = std(normNN,1);
 
 %% Mean vector norms over samples at the same time 
-y = reshape(meanNormNN, num_subsamples, length(KNN_files));
-meanTimeNormNN = mean(y, 1);
+y2 = reshape(meanNormNN, num_subsamples, length(KNN_files));
+meanTimeNormNN = mean(y2, 1);
+
+y3 = reshape(meanStdNN, num_subsamples, length(KNN_files));
+meanTimeStdNormNN = mean(y3, 1);
 
 %% Plot vector norm - according to epochs colors
 % Plotting all samples, i.e. if num_samples=60, then 60 samples for that time point. Averaged across neighbors.
@@ -360,10 +371,17 @@ if save_fig
     saveas(gcf, strcat(pwd,filesep,'figures',filesep,'meanStdTimeNormNN_targetColor_',saveStr));
 end
 
-%% 
-squareform(pdist(data));
-figure;
-imagesc(squareform(pdist(data,'cosine')));
+%% Save variables
+
+%% First across all subsamples, then averaged - pairwise
+keySet = {'params', 'targets', 'testAccSubsamples', 'testAcc', 'trainAccSubsamples', 'trainAcc', ...
+    'dataNorm', 'meanTimeDataNorm', 'NNids', 'meanTimeNNids', 'meanNormNN', 'meanTimeNormNN', ... 
+    'meanStdNN', 'meanTimeStdNormNN'};
+
+valueSet = {params_out, targets, testAccSubsamples, testAcc, trainAccSubsamples, trainAcc, ...
+    dataNorm, meanTimeDataNorm, NNids, meanTimeNNids, meanNormNN, meanTimeNormNN, ...
+     meanStdNN, meanTimeStdNormNN};
+M = containers.Map(keySet,valueSet,'UniformValues',false)
 
 end
 

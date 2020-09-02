@@ -145,13 +145,17 @@ end
 % Find log interval:
 logInt = abs(subEpoch(num_subsamples) - subEpoch(num_subsamples*2));
 productionTime = (1:length(epoch))'; 
+time = [1:length(KNN_files)];
 relTime = productionTime./max(productionTime);
 
 %% %%%%%%%%%% ANALYSES %%%%%%%%%%%%%%
 
-saveStr = strcat(model_identifier,'_',layer,'_hier_',num2str(hier_level),'_numSubsamples_',num2str(num_subsamples),'_k_',num2str(k));
+saveStr = strcat(model_identifier,'_',layer,'_hier_',num2str(hier_level),'_numSubsamples_',num2str(num_subsamples),'_k_',num2str(k),'.pdf');
 colorsEpoch = magma(max(epoch))% +1); % 3 colors
 % colorsEpoch = colorsEpoch(2:end, :);
+colorsTarget = magma(max(num_classes));
+targetLoc = arrayfun(@(x) find(targets==x), [1:max(target)],'uniformoutput',false); % Locates the targets
+
 %% Make axes labels
 subEpochSwitch = diff(subEpoch);
 subEpochSwitch = [0;subEpochSwitch];
@@ -190,7 +194,7 @@ if save_fig
     set(gca,'XTickLabel',downsample(round(relTime,2), round(size(relTime,1)/10)))
     xlabel('Relative time in training')
     axis tight
-    saveas(gcf, strcat(pwd,filesep,'figures',filesep,'test_acc_',saveStr,'.pdf'));
+    saveas(gcf, strcat(pwd,filesep,'figures',filesep,'test_acc_',saveStr));
     
     % If label using subepoch indexing:
 %     set(gca,'XTick',downsample(incrSubEpochTrial,15))
@@ -205,9 +209,9 @@ end
 %% Vector norm
 norm = vecnorm(data');
 
+% Epoch coloring
 if save_fig
     figure;
-    ax=axes()
     hold on
     arrayfun(@(i) scatter(productionTime(epochLoc{i})', norm(epochLoc{i})', 2, colorsEpoch(i,:), 'filled', 'o'), [1:max(epoch)])
     hold on
@@ -216,155 +220,144 @@ if save_fig
     xlabel('Relative time in training')
     ylabel('Norm')
     axis tight
-    %saveas(gcf, strcat(pwd,filesep,'figures',filesep,'norm_epochColor_',saveStr,'.pdf'));
+    saveas(gcf, strcat(pwd,filesep,'figures',filesep,'norm_epochColor_',saveStr));
 end 
 
-
-%%
-colorsTarget = magma(max(num_classes))
-
-targetLoc = arrayfun(@(x) find(target==x), [1:max(data,1)],'uniformoutput',false); % Locates the targets
-
-
-
+% Target coloring
 if save_fig
     figure;
-    ax=axes()
     hold on
-    arrayfun(@(i) scatter(productionTime(epochLoc{i})', norm(epochLoc{i})', 2, colorsEpoch(i,:), 'filled', 'o'), [1:max(epoch)])
+    arrayfun(@(i) scatter(productionTime(targetLoc{i})', norm(targetLoc{i})', 8, colorsTarget(i,:), 'filled', 'o'), [1:max(targets)])
     hold on
     set(gca,'XTick',downsample(productionTime, round(size(relTime,1)/10)))
     set(gca,'XTickLabel',downsample(round(relTime,2), round(size(relTime,1)/10)))
     xlabel('Relative time in training')
     ylabel('Norm')
     axis tight
-    %saveas(gcf, strcat(pwd,filesep,'figures',filesep,'norm_targetColor_',saveStr,'.pdf'));
+    saveas(gcf, strcat(pwd,filesep,'figures',filesep,'norm_targetColor_',saveStr));
 end 
-%% 
-k=300
-NNids_self = knnsearch(data, data, 'K', k , 'Distance', dist_metric); 
+
+%% Nearest neighbors
+NNids_self = knnsearch(data, data, 'K', k, 'Distance', dist_metric); 
+NNids_self = NNids_self./max(NNids_self(:,1)); % normalized NNids
 NNids = NNids_self(:, 2:end); 
-figure;
-imagesc(NNids)
-% ylabel('Time')
-xlabel('K nearest neighbors')
-hold on
-set(gca,'YTick',downsample(incrSubEpochTrial,20))
-set(gca,'YTickLabel',downsample(incrSubEpoch,20))
-ylabel('Subepoch')
-axis tight
-saveas(gcf, strcat(pwd,filesep,'figures',filesep,'KNN300_',model_identifier,'_',layer,'_',num2str(hier_level),'.pdf'));
 
-%%
-figure;imagesc(NNids)
-figure;plot(NNids(1:20,:)')
+if save_fig
+    figure;
+    imagesc(NNids)
+    hold on
+    xlabel('K nearest neighbors')
+    set(gca,'YTick',downsample(productionTime, round(size(relTime,1)/10)))
+    set(gca,'YTickLabel',downsample(round(relTime,2), round(size(relTime,1)/10)))
+    ylabel('Relative time in training')
+    colorbar()
+    axis tight
+    saveas(gcf, strcat(pwd,filesep,'figures',filesep,'NearestNeighbors_',saveStr));
+end  
 
-%% Compute norm
-norms = zeros(k - 1, length(epoch));
+
+%% Compute norm of neighbors
+normNN = zeros(k - 1, length(epoch));
 
 for i=2:k
-    norms(i-1, :)=(abs(NNids_self(:,1) - NNids_self(:,i)));%.^2;
+    normNN(i-1, :)=(abs(NNids_self(:,1) - NNids_self(:,i)));%.^2;
 end
 
-mean_norm = mean(norms,1);
-std_norm = std(norms,1);
-
-%%
-% Simple figure test
-figure;scatter([1:size(mean_norm,2)], mean_norm)
+meanNormNN = mean(normNN,1);
+stdNormNN = std(normNN,1);
 
 %% Mean vector norms over samples at the same time 
-y = reshape(mean_norm, num_subsamples, length(KNN_files));
-mean_time_norm = mean(y, 1);
-
+y = reshape(meanNormNN, num_subsamples, length(KNN_files));
+meanTimeNormNN = mean(y, 1);
 
 %% Plot vector norm - according to epochs colors
 % Plotting all samples, i.e. if num_samples=60, then 60 samples for that time point. Averaged across neighbors.
-colorsEpoch = magma(max(epoch)); % 3 colors
-figure;
-ax=axes()
-epochLoc = arrayfun(@(x) find(epoch==x), [1:max(epoch)],'uniformoutput',false); % Locates the epochs
-hold on 
-% arrayfun(@(i) plot(productionTime(epoch_loc{i})', testAccSubsamples(epoch_loc{i})', 'Linewidth', 3, 'Color', colors(i,:)), [1:max(epoch)])
-hold on
-arrayfun(@(i) scatter(productionTime(epochLoc{i})', mean_norm(epochLoc{i})', 1, colorsEpoch(i,:), 'filled', 'o'), [1:max(epoch)])
-ax.YLabel.String='Neighborhod time distance'
-ax.XLabel.String='Subepoch'
-hold on
-set(gca,'XTick',downsample(incrSubEpochTrial,20))
-set(gca,'XTickLabel',downsample(incrSubEpoch,20))
-axis tight
-saveas(gcf, strcat(pwd,filesep,'figures',filesep,'meannorm_KNN_',model_identifier,'_',layer,'_',num2str(hier_level),'.pdf'));
 
+if save_fig
+    figure;
+    hold on
+    arrayfun(@(i) scatter(productionTime(epochLoc{i})', meanNormNN(epochLoc{i})', 1, colorsEpoch(i,:), 'filled', 'o'), [1:max(epoch)])
+    ylabel('Neighbor distance') % (unit: training time)
+    hold on
+    set(gca,'XTick',downsample(productionTime, round(size(relTime,1)/10)))
+    set(gca,'XTickLabel',downsample(round(relTime,2), round(size(relTime,1)/10)))
+    xlabel('Relative time in training')
+    axis tight
+    saveas(gcf, strcat(pwd,filesep,'figures',filesep,'meanNormNN_',saveStr));
+end
 
-%% Plot vector norm - according to subepochs colors
-% Create unique subEpoch vector that adds the values
-
-%subEpoch_incr = subEpoch + [1:log_int:]log_int;
-
-% Plotting all samples, i.e. if num_samples=60, then 60 samples for that time point. Averaged across neighbors.
-colorsEpoch = magma(length(unique(subEpoch))*3); 
-figure;
-ax=axes()
-subEpoch_loc = arrayfun(@(x) find(subEpoch==x), [(unique(subEpoch))],'uniformoutput',false); % Locates the subepochs
-hold on 
-arrayfun(@(i) scatter(productionTime(subEpoch_loc{i})', mean_norm(subEpoch_loc{i})', 10, colorsEpoch(i,:), 'filled', 'o'), [(unique(subEpoch))])
-ax.YLabel.String='Neighborhod time distance'
-ax.XLabel.String='Time'
 
 %% Plot vector norm - according to data point colors
 % Plotting all samples, i.e. if num_samples=60, then 60 samples for that time point. Averaged across neighbors.
-colorsEpoch = magma(length(mean_norm)); 
-figure;
-ax=axes()
-hold on 
-arrayfun(@(i) scatter(productionTime(i)', mean_norm(i)', 10, colorsEpoch(i,:), 'filled', 'o'), [1:length(mean_norm)])
+colorsNormNN = magma(length(meanNormNN)); 
+
+if save_fig
+    figure;
+    hold on
+    arrayfun(@(i) scatter(productionTime(i)', meanNormNN(i)', 10, colorsNormNN(i,:), 'filled', 'o'), [1:length(meanNormNN)])
+    ylabel('Neighbor distance') % (unit: training time)
+    hold on
+    set(gca,'XTick',downsample(productionTime, round(size(relTime,1)/10)))
+    set(gca,'XTickLabel',downsample(round(relTime,2), round(size(relTime,1)/10)))
+    xlabel('Relative time in training')
+    axis tight
+    saveas(gcf, strcat(pwd,filesep,'figures',filesep,'meanNormNN_indColors_',saveStr));
+end
 
 %% Plot vector norm - according to data point colors - meaned over time
 % Plotting all samples, i.e. if num_samples=60, then 60 samples for that time point. Averaged across neighbors.
-time = [1:length(KNN_files)]
-colorsEpoch = magma(length(mean_time_norm)); 
-figure;
-ax=axes()
-hold on 
-arrayfun(@(i) scatter(time(i)', mean_time_norm(i)', 30, colorsEpoch(i,:), 'filled', 'o'), [1:length(mean_time_norm)])
-ax.YLabel.String='Neighborhod time distance'
-ax.XLabel.String='Time'
-%ax.Title.String='
+colorsMeanTimeNormNN = magma(length(meanTimeNormNN)); 
 
-% ax.YAxis.LineWidth=2;
-% ax.YAxis.TickLength=[.005,0.007];
-% ax.XAxis.LineWidth=2;
-% ax.XAxis.TickLength=[.005,0.007];
+if save_fig
+    figure;
+    hold on
+    arrayfun(@(i) scatter(time(i)', meanTimeNormNN(i)', 30, colorsMeanTimeNormNN(i,:), 'filled', 'o'), [1:length(meanTimeNormNN)])
+    ylabel('Mean neighbor distance') % (unit: training time)
+    hold on
+    set(gca,'XTick',downsample(productionTime, round(size(relTime,1)/10)))
+    set(gca,'XTickLabel',downsample(round(relTime,2), round(size(relTime,1)/10)))
+    xlabel('Relative time in training')
+    axis tight
+    saveas(gcf, strcat(pwd,filesep,'figures',filesep,'meanTimeNormNN_',saveStr));
+end
 
-% ax.YAxis.LineWidth=2;
-% ax.YAxis.TickLength=[.005,0.007];
-% ax.FontSize=20
-% ax.FontWeight='bold'
-% h=gcf;
-% set(h,'PaperOrientation','landscape');
-% set(h,'PaperPosition', [1 1 28 19]);
 
-%% Vector norm and std in same plot
-% figure;scatter(1:length(mean_norm),mean_norm,1);hold on;scatter(1:length(std_norm),v,1,'red');hold on;...
-%     legend('Mean','Std');xticks(linspace(0,18000,7));xticklabels({0,10,20,30,40,50,60});xlabel('Epoch');ylabel('Neighborhood time distance')
+%% KNN Vector norm and std in same plot
 
-figure;
-ax=axes()
-hold on 
-scatter(productionTime', mean_norm', 1, 'red', 'filled', 'o')
-hold on
-arrayfun(@(i) scatter(productionTime(epochLoc{i})', std_norm(epochLoc{i})', 1, 'blue', 'filled', 'o'), [1:max(epoch)])
-hold on
-legend('Mean','Std')
-hold on
-ax.YLabel.String='Neighborhod time distance'
-ax.XLabel.String='Subepoch'
-hold on
-set(gca,'XTick',downsample(incrSubEpochTrial,20))
-set(gca,'XTickLabel',downsample(incrSubEpoch,20))
-axis tight
-saveas(gcf, strcat(pwd,filesep,'figures',filesep,'mean_std_norm_KNN_',model_identifier,'_',layer,'_',num2str(hier_level),'.pdf'));
+if save_fig
+    figure;
+    scatter(productionTime', meanNormNN', 1, colorsEpoch(1,:), 'filled', 'o')
+    hold on
+    scatter(productionTime', stdNormNN', 1, colorsEpoch(2,:), 'filled', 'o')
+    hold on
+    legend('Mean neighbor distance','Std neighbor distance')
+    ylabel('Neighbor distance') 
+    hold on
+    set(gca,'XTick',downsample(productionTime, round(size(relTime,1)/10)))
+    set(gca,'XTickLabel',downsample(round(relTime,2), round(size(relTime,1)/10)))
+    xlabel('Relative time in training')
+    axis tight
+    saveas(gcf, strcat(pwd,filesep,'figures',filesep,'meanStdTimeNormNN_',saveStr));
+end
+
+% Target coloring
+
+if save_fig
+    figure;
+        arrayfun(@(i) scatter(productionTime(targetLoc{i})', norm(targetLoc{i})', 8, colorsTarget(i,:), 'filled', 'o'), [1:max(targets)])
+    scatter(productionTime', meanNormNN', 1, colorsEpoch(1,:), 'filled', 'o')
+    hold on
+    scatter(productionTime', stdNormNN', 1, colorsEpoch(2,:), 'filled', 'o')
+    hold on
+    legend('Mean neighbor distance','Std neighbor distance')
+    ylabel('Neighbor distance') 
+    hold on
+    set(gca,'XTick',downsample(productionTime, round(size(relTime,1)/10)))
+    set(gca,'XTickLabel',downsample(round(relTime,2), round(size(relTime,1)/10)))
+    xlabel('Relative time in training')
+    axis tight
+    saveas(gcf, strcat(pwd,filesep,'figures',filesep,'meanStdTimeNormNN_',saveStr));
+end
 
 %% 
 squareform(pdist(data));
